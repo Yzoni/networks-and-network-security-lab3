@@ -7,46 +7,98 @@ import sys
 class Server:
     def __init__(self, port=8080):
         self.port = port
-        self.inputs = []
+        self.inputs = {}
         self.outputs = []
 
     def start(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
-            # server_socket.setblocking(False)
             server_socket.bind(('', self.port))
             server_socket.listen(5)
-            self.inputs.append(server_socket)
+            self.inputs[server_socket] = 'server'
             try:
                 print('Started server')
                 while True:
                     readable_sockets, writable_sockets, exception_sockets = select.select(self.inputs, self.outputs, [])
                     for r in readable_sockets:
-                        print(readable_sockets)
                         if r is server_socket:
                             client_socket, client_address = r.accept()
                             print('New connection from' + str(client_address))
-                            self.inputs.append(client_socket)
+                            self.inputs[client_socket] = 'Unnamed'
                             self.broadcast("Client connected: " + str(client_address), server_socket, client_socket)
                         else:
-                            data = r.recv(1024).decode()
-                            if data:
-                                # A readable client socket has data
-                                print('received ' + str(data) + ' from ' + str(r.getpeername()))
-                                self.broadcast(data, server_socket, r)
-                            else:
-                                self.inputs.remove(r)
-                                r.close()
+                            try:
+                                data = r.recv(1024).decode()
+                                if data:
+                                    print('received ' + str(data) + ' from ' + str(r.getpeername()))
+                                    self.parse_data(data, server_socket, r)
+                                else:
+                                    del self.inputs[r]
+                                    r.close()
+                            except socket.error:
+                                del self.inputs[r]
+                                continue
 
             except KeyboardInterrupt:
                 print('Stopped server')
                 pass
 
+    def parse_data(self, data, server_socket, client_socket):
+        print(client_socket)
+        if data[0] == '/':
+            command = data.split(' ', 1)[0][1:]
+            parameters = data.split(' ')[1:]
+            if command == 'nick':
+                self.inputs[client_socket] = parameters[0]
+            elif command == 'say':
+                self.broadcast(' '.join(parameters), server_socket, client_socket)
+            elif command == 'whisper':
+                whisper_client = parameters[0]
+                message = ' '.join(parameters[1:])
+                found = False
+                for s, n in self.inputs.items():
+                    if n == whisper_client:
+                        self.whisper(message, whisper_client, client_socket)
+                        found = True
+                if found is False:
+                    self.whisper('User does not exist', client_socket, server_socket)
+            elif command == 'list':
+                self.whisper(self.list_clients(client_socket, server_socket), client_socket, server_socket)
+            elif command == 'help' or command == '?':
+                self.list_commands(client_socket, server_socket)
+            elif command == 'me':
+                self.whisper('me goes', server_socket, client_socket)
+            elif command == 'whois':
+                self.whisper('Name is ' + self.inputs[client_socket] + ', with ip ' + str(client_socket.getpeername()), client_socket,
+                             server_socket)
+            elif command == 'filter':
+                self.whisper('Command not implemented!', client_socket, server_socket)
+            else:
+                self.whisper('Command unknown!', client_socket, server_socket)
+        else:
+            self.broadcast(data, server_socket, client_socket)
+        return None
+
+    def whisper(self, message, whisper_socket, send_socket):
+        whisper_socket.send(('(WHISPERS) ' + self.inputs[send_socket] + ': ' + message).encode())
+
     def broadcast(self, message, server_socket, client_socket):
-        print('inputs' + str(self.inputs))
+        print('Broadcast ' + message)
         for socket in self.inputs:
             if socket != server_socket and socket != client_socket:
                 socket.send(message.encode())
-                print('message sent ' + message)
+
+    def list_commands(self, client_socket, server_socket):
+        self.whisper('/nick <user>', client_socket, server_socket)
+        self.whisper('/say <text>', client_socket, server_socket)
+        self.whisper('/whiser <user> <text>', client_socket, server_socket)
+        self.whisper('/list ', client_socket, server_socket)
+
+    def list_clients(self, client_socket, server_socket):
+        clients = ''
+        for socket in self.inputs:
+            if socket != server_socket and socket != client_socket:
+                clients += self.inputs[socket] + ', '
+        return clients
 
 
 # Command line parser.

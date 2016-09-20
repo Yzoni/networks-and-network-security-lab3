@@ -14,19 +14,6 @@ from threading import Thread
 from gui import MainWindow
 
 
-class Client:
-    def start(self, server_ip, server_port):
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            print('Connecting with ' + str((server_ip, server_port)))
-            s.connect((server_ip, server_port))
-            while True:
-                # send_data = input('> ')
-                data = s.recv(1024)
-                if data:
-                    print(data)
-                    # s.send(send_data.encode())
-
-
 def ui(receive_queue, send_queue):
     """
     GUI loop.
@@ -52,9 +39,12 @@ def ui(receive_queue, send_queue):
 def work(receive_queue, send_queue, host, port):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         print('Connecting with ' + str((host, port)))
-        s.connect(("127.0.0.1", port))
-        AsyncClient(host, port, receive_queue, send_queue)
-        asyncore.loop(timeout = 0.5)
+        try:
+            s.connect(("127.0.0.1", port))
+            AsyncClient(host, port, receive_queue, send_queue)
+            asyncore.loop(timeout=0.5)
+        except socket.error:
+            print('Connection refused')
 
 
 class AsyncClient(asyncore.dispatcher):
@@ -73,7 +63,7 @@ class AsyncClient(asyncore.dispatcher):
 
     def handle_read(self):
         data = self.recv(1024)
-        self.receive_queue.put(data)
+        self.receive_queue.put(data.decode())
 
     def writable(self):
         return not self.send_queue.empty()
@@ -96,5 +86,9 @@ if __name__ == '__main__':
     ui_thread = Thread(target=ui, args=(receive_q, send_q))
     work_thread = Thread(target=work, args=(receive_q, send_q, args.host, args.port))
 
-    ui_thread.start()
-    work_thread.start()
+    try:
+        ui_thread.start()
+        work_thread.start()
+    except:
+        ui_thread.join()
+        work_thread.join()
