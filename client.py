@@ -23,20 +23,39 @@ from gui import MainWindow
 
 
 class Client:
-    def __init__(self, cert_file=''):
+    def __init__(self, host, port, cert_file=''):
         if cert_file:
             self.ssl = True
             self.cert_file = cert_file
+        self.host = host
+        self.port = port
+        self.receive_queue = Queue()
+        self.send_queue = Queue()
 
-    def ui(self, receive_queue, send_queue):
-        """
-        UI thread
+    def run(self):
+        ui_thread = UI(self.receive_queue, self.send_queue)
+        work_thread = Worker(self.receive_queue, self.send_queue, self.host, self.port, self.cert_file)
+        ui_thread.start()
+        work_thread.start()
 
-        :param receive_queue:
-        :param send_queue:
-        :return:
-        """
-        # The following code explains how to use the GUI.
+        while work_thread.is_alive():
+            if not ui_thread.is_alive():
+                work_thread.stop()
+                break
+
+
+class UI(Thread):
+    def __init__(self, receive_queue, send_queue, cert_file='', group=None, target=None, name=None, args=(),
+                 kwargs=None, *, daemon=None):
+        if cert_file:
+            self.ssl = True
+            self.cert_file = cert_file
+        self.receive_queue = receive_queue
+        self.send_queue = send_queue
+        self.go = True
+        super().__init__(group, target, name, args, kwargs, daemon=daemon)
+
+    def run(self):
         w = MainWindow()
         # update() returns false when the user quits or presses escape.
 
@@ -44,30 +63,37 @@ class Client:
             # if the user entered a line getline() returns a string.
             line = w.getline()
 
-            if not receive_queue.empty():
-                while not receive_queue.empty():
-                    w.writeln(receive_queue.get())
+            if not self.receive_queue.empty():
+                while not self.receive_queue.empty():
+                    w.writeln(self.receive_queue.get())
             if line:
                 w.writeln('You: ' + line)
-                send_queue.put(line)
+                self.send_queue.put(line)
 
-    def work(self, receive_queue, send_queue, host, port, stop_thread=False):
-        """
-        Worker thread
+    def stop(self):
+        self.go = False
 
-        :param receive_queue: Queue for received messages
-        :param send_queue: Queue for to be send messages
-        :param host: Server host address to connect with
-        :param port: Server port
-        :param stop_thread: variable to
-        :return:
-        """
+
+class Worker(Thread):
+    def __init__(self, receive_queue, send_queue, host, port, cert_file='', group=None, target=None, name=None, args=(),
+                 kwargs=None, *, daemon=None):
+        if cert_file:
+            self.ssl = True
+            self.cert_file = cert_file
+        self.receive_queu = receive_queue
+        self.send_queue = send_queue
+        self.host = host
+        self.port = port
+        self.go = True
+        super().__init__(group, target, name, args, kwargs, daemon=daemon)
+
+    def run(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            print('Connecting with ' + str((host, port)))
+            print('Connecting with ' + str((self.host, self.port)))
             if ssl:
                 s = self.wrap_socket(s)
-            s.connect((host, port))
-            while True:
+            s.connect((self.host, self.port))
+            while self.go:
                 readable_sockets, writable_sockets, exception_sockets = select.select([s], [], [], 1)
                 for r in readable_sockets:
                     data = r.recv(1024)
@@ -75,19 +101,18 @@ class Client:
                         message = data.decode()
                     else:
                         # Stop working when server disconnects
-                        receive_queue.put('Server disconnected')
+                        self.receive_queu.put('Server disconnected')
                         s.close()
                         return
                     print('Worker received: ' + message)
-                    receive_queue.put(message)
-                if not send_queue.empty():
-                    message = send_queue.get().encode()
+                    self.receive_queu.put(message)
+                if not self.send_queue.empty():
+                    message = self.send_queue.get().encode()
                     print('Worker sending: ' + message.decode())
                     s.send(message)
 
-                # Escape loop on stop thread
-                if stop_thread:
-                    return
+    def stop(self):
+        self.go = False
 
     def wrap_socket(self, socket):
         """
@@ -110,16 +135,4 @@ if __name__ == '__main__':
     p.add_argument('--cert', help='server public cert', default='')
     args = p.parse_args(sys.argv[1:])
 
-    receive_q = Queue()
-    send_q = Queue()
-
-    client = Client(args.cert)
-    stop_thread = False
-    ui_thread = Thread(target=client.ui, args=(receive_q, send_q))
-    work_thread = Thread(target=client.work, args=(receive_q, send_q, args.host, args.port, lambda: stop_thread))
-
-    ui_thread.start()
-    work_thread.start()
-
-    while work_thread.is_alive():
-        stop_thread = False
+    Client(args.host, args.port, args.cert).run()
