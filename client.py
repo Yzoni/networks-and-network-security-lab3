@@ -50,7 +50,6 @@ def work(receive_queue, send_queue, host, port):
             readable_sockets, writable_sockets, exception_sockets = select.select([s], [], [], 1)
             print('looping')
             for r in readable_sockets:
-                r.setblocking(0)
                 data = r.recv(1024)
                 message = data.decode()
                 print('Worker received: ' + message)
