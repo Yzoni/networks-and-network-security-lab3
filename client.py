@@ -30,9 +30,11 @@ class Client:
 
     def ui(self, receive_queue, send_queue):
         """
-        GUI loop.
-        port: port to connect to.
-        cert: public certificate (bonus task)
+        UI thread
+
+        :param receive_queue:
+        :param send_queue:
+        :return:
         """
         # The following code explains how to use the GUI.
         w = MainWindow()
@@ -49,7 +51,17 @@ class Client:
                 w.writeln('You: ' + line)
                 send_queue.put(line)
 
-    def work(self, receive_queue, send_queue, host, port, stop_thread):
+    def work(self, receive_queue, send_queue, host, port, stop_thread=False):
+        """
+        Worker thread
+
+        :param receive_queue: Queue for received messages
+        :param send_queue: Queue for to be send messages
+        :param host: Server host address to connect with
+        :param port: Server port
+        :param stop_thread: variable to
+        :return:
+        """
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             print('Connecting with ' + str((host, port)))
             if ssl:
@@ -78,6 +90,11 @@ class Client:
                     return
 
     def wrap_socket(self, socket):
+        """
+        Wrap the socket in a TLS layer
+        :param socket: socket
+        :return: ssl socket
+        """
         return ssl.wrap_socket(socket,
                                ca_certs=self.cert_file,
                                cert_reqs=ssl.CERT_REQUIRED,
@@ -96,7 +113,7 @@ if __name__ == '__main__':
     receive_q = Queue()
     send_q = Queue()
 
-    client = Client('server.cert')
+    client = Client(args.cert)
     stop_thread = False
     ui_thread = Thread(target=client.ui, args=(receive_q, send_q))
     work_thread = Thread(target=client.work, args=(receive_q, send_q, args.host, args.port, lambda: stop_thread))

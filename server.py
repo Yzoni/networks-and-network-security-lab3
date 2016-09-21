@@ -23,6 +23,10 @@ class Server:
             self.key_file = key_file
 
     def start(self):
+        """
+
+        :return:
+        """
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
             server_socket.bind(('', self.port))
             server_socket.listen(5)
@@ -40,23 +44,32 @@ class Server:
                             self.inputs[client_socket] = 'Unnamed'
                             self.broadcast("Client connected: " + str(client_address), server_socket, client_socket)
                         else:
-                            try:
-                                data = r.recv(1024).decode()
-                                if data:
-                                    print('received ' + str(data) + ' from ' + str(r.getpeername()))
-                                    self.parse_data(data, server_socket, r)
-                                else:
-                                    del self.inputs[r]
-                                    r.close()
-                            except socket.error:
+                            # try:
+                            data = r.recv(1024).decode()
+                            if data:
+                                print('received ' + str(data) + ' from ' + str(r.getpeername()))
+                                self.parse_data(data, server_socket, r)
+                            else:
                                 del self.inputs[r]
-                                continue
+                                r.close()
+                            # except socket.error:
+                            #     # Client socket unexpectedly closed
+                            #     del self.inputs[r]
+                            #     continue
 
             except KeyboardInterrupt:
                 print('Stopped server')
                 pass
 
     def parse_data(self, data, server_socket, client_socket):
+        """
+        Parse command data when message is prefixed by '/"
+
+        :param data: message data
+        :param server_socket: server socket
+        :param client_socket: client socket
+        :return: None
+        """
         if data[0] == '/':
             command = data.split(' ', 1)[0][1:]
             parameters = data.split(' ')[1:]
@@ -96,14 +109,29 @@ class Server:
                 self.whisper('Command unknown!', client_socket, server_socket)
         else:
             self.broadcast(data, server_socket, client_socket)
-        return None
 
     def whisper(self, message, whisper_socket, send_socket):
+        """
+        Sends a private message to a single client
+
+        :param message: the message to be send
+        :param whisper_socket: the receiving client
+        :param send_socket: the client who sends the message
+        :return: None
+        """
         message = '(WHISPERS) ' + self.inputs[send_socket] + ': ' + message
         print(message)
         whisper_socket.send(message.encode())
 
     def broadcast(self, message, server_socket, client_socket):
+        """
+        Broadcast a message to all clients except the server socket and the client itself
+
+        :param message: the message to be broadcast
+        :param server_socket: server socket
+        :param client_socket: the sending client socket
+        :return: None
+        """
         message = str(self.inputs[client_socket]) + ': ' + message
         print(message)
         for s in self.inputs:
@@ -112,6 +140,12 @@ class Server:
                 s.send(filtered_message.encode())
 
     def wrap_socket(self, socket):
+        """
+        Wrap a socket in a TLS layer
+
+        :param socket: the socket
+        :return: ssl socket
+        """
         return ssl.wrap_socket(socket,
                                server_side=True,
                                certfile=self.cert_file,
@@ -119,6 +153,13 @@ class Server:
                                ssl_version=ssl.PROTOCOL_TLSv1)
 
     def list_commands(self, client_socket, server_socket):
+        """
+        whisper a list of commands to a client
+
+        :param client_socket: the client to request the list
+        :param server_socket: the server socket
+        :return: None
+        """
         commands = ['/nick <user>           - Change nickname',
                     '/say <text>            - Say to everyone',
                     '/whisper <user> <text> - Say to specific nick',
@@ -132,6 +173,13 @@ class Server:
             self.whisper(c, client_socket, server_socket)
 
     def list_clients(self, client_socket, server_socket):
+        """
+        Creates a string currently connected client nicknames
+
+        :param client_socket: client socket
+        :param server_socket: server socket
+        :return: string of clients seperated by comma
+        """
         clients = []
         for socket in self.inputs:
             if socket != server_socket and socket != client_socket:
@@ -142,12 +190,26 @@ class Server:
             return 'Empty'
 
     def add_filter_words(self, word, client_socket):
+        """
+        Add a word to the filter for a client
+
+        :param word: the new filter word
+        :param client_socket: the client socket
+        :return:
+        """
         if client_socket in self.filtered_words:
             self.filtered_words[client_socket].append(word)
         else:
             self.filtered_words[client_socket] = [word]
 
     def filter_words(self, message, client_socket):
+        """
+        Filter a string on words from a list
+
+        :param message: message to be filtered
+        :param client_socket: for client
+        :return: filtered message
+        """
         try:
             resultwords  = [word for word in message.split(' ') if word.lower() not in self.filtered_words[client_socket]]
             return ' '.join(resultwords)
@@ -155,6 +217,12 @@ class Server:
             return message
 
     def get_socket_by_nick(self, nick):
+        """
+        Get the socket by a nick string
+
+        :param nick: nick to be found
+        :return: socket
+        """
         for s, n in self.inputs.items():
             if n == nick:
                 return s
