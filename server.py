@@ -44,7 +44,6 @@ class Server:
                             self.inputs[client_socket] = 'Unnamed'
                             self.broadcast("Client connected: " + str(client_address), server_socket, client_socket)
                         else:
-                            # try:
                             data = r.recv(1024).decode()
                             if data:
                                 print('received ' + str(data) + ' from ' + str(r.getpeername()))
@@ -52,10 +51,6 @@ class Server:
                             else:
                                 del self.inputs[r]
                                 r.close()
-                            # except socket.error:
-                            #     # Client socket unexpectedly closed
-                            #     del self.inputs[r]
-                            #     continue
 
             except KeyboardInterrupt:
                 print('Stopped server')
