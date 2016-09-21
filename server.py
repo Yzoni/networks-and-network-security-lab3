@@ -96,7 +96,7 @@ class Server:
                 nick = parameters[0]
                 sock = self.get_socket_by_nick(nick)
                 if sock:
-                    self.whisper('Name is ' + self.inputs[client_socket] + ', with ip ' + str(client_socket.getpeername()),
+                    self.whisper('Name is ' + self.inputs[sock] + ', with ip ' + str(client_socket.getpeername()),
                                  client_socket,
                                  server_socket)
                 else:
