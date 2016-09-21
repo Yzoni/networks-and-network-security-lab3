@@ -16,7 +16,7 @@ class Server:
     def __init__(self, port=8080, cert_file='', key_file=''):
         self.port = port
         self.inputs = {}
-        self.outputs = []
+        self.filtered_words = {}
         if cert_file and key_file:
             self.ssl = True
             self.cert_file = cert_file
@@ -30,7 +30,7 @@ class Server:
             try:
                 print('Started server')
                 while True:
-                    readable_sockets, writable_sockets, exception_sockets = select.select(self.inputs, self.outputs, [])
+                    readable_sockets, writable_sockets, exception_sockets = select.select(self.inputs, [], [])
                     for r in readable_sockets:
                         if r is server_socket:
                             client_socket, client_address = r.accept()
@@ -57,10 +57,10 @@ class Server:
                 pass
 
     def parse_data(self, data, server_socket, client_socket):
-        print(client_socket)
         if data[0] == '/':
             command = data.split(' ', 1)[0][1:]
             parameters = data.split(' ')[1:]
+            print(parameters)
             if command == 'nick':
                 self.inputs[client_socket] = parameters[0]
             elif command == 'say':
@@ -68,12 +68,10 @@ class Server:
             elif command == 'whisper':
                 whisper_client = parameters[0]
                 message = ' '.join(parameters[1:])
-                found = False
-                for s, n in self.inputs.items():
-                    if n == whisper_client:
-                        self.whisper(message, whisper_client, client_socket)
-                        found = True
-                if found is False:
+                sock = self.get_socket_by_nick(whisper_client)
+                if sock:
+                    self.whisper(message, whisper_client, client_socket)
+                else:
                     self.whisper('User does not exist', client_socket, server_socket)
             elif command == 'list':
                 self.whisper(self.list_clients(client_socket, server_socket), client_socket, server_socket)
@@ -82,11 +80,18 @@ class Server:
             elif command == 'me':
                 self.whisper('me goes', server_socket, client_socket)
             elif command == 'whois':
-                self.whisper('Name is ' + self.inputs[client_socket] + ', with ip ' + str(client_socket.getpeername()),
-                             client_socket,
-                             server_socket)
+                nick = parameters[0]
+                sock = self.get_socket_by_nick(nick)
+                if sock:
+                    self.whisper('Name is ' + self.inputs[client_socket] + ', with ip ' + str(client_socket.getpeername()),
+                                 client_socket,
+                                 server_socket)
+                else:
+                    self.whisper('User does not exist', client_socket, server_socket)
             elif command == 'filter':
-                self.whisper('Command not implemented!', client_socket, server_socket)
+                filtered_word = parameters[0]
+                self.add_filter_words(filtered_word, client_socket)
+                self.whisper('Will filter word: "' + filtered_word + '"', client_socket, server_socket)
             else:
                 self.whisper('Command unknown!', client_socket, server_socket)
         else:
@@ -94,13 +99,17 @@ class Server:
         return None
 
     def whisper(self, message, whisper_socket, send_socket):
-        whisper_socket.send(('(WHISPERS) ' + self.inputs[send_socket] + ': ' + message).encode())
+        message = '(WHISPERS) ' + self.inputs[send_socket] + ': ' + message
+        print(message)
+        whisper_socket.send(message.encode())
 
     def broadcast(self, message, server_socket, client_socket):
-        print('Broadcast ' + message)
+        message = str(self.inputs[client_socket]) + ': ' + message
+        print(message)
         for s in self.inputs:
             if s != server_socket and s != client_socket:
-                s.send(message.encode())
+                filtered_message = self.filter_words(message, s)
+                s.send(filtered_message.encode())
 
     def wrap_socket(self, socket):
         return ssl.wrap_socket(socket,
@@ -110,20 +119,46 @@ class Server:
                                ssl_version=ssl.PROTOCOL_TLSv1)
 
     def list_commands(self, client_socket, server_socket):
-        commands = ['/nick <user>',
-                    '/say <text>',
-                    'whisper <user> <text>',
-                    '/list']
+        commands = ['/nick <user>           - Change nickname',
+                    '/say <text>            - Say to everyone',
+                    '/whisper <user> <text> - Say to specific nick',
+                    '/list                  - List all users',
+                    '/help or /?            - List commands',
+                    '/me                    - Doing something',
+                    '/whois <user>          - Info of user',
+                    '/filter <word>         - Filter words'
+                    ]
         for c in commands:
             self.whisper(c, client_socket, server_socket)
 
     def list_clients(self, client_socket, server_socket):
-        clients = ''
+        clients = []
         for socket in self.inputs:
             if socket != server_socket and socket != client_socket:
-                clients += self.inputs[socket] + ', '
-        return clients
+                clients.append(self.inputs[socket])
+        if clients:
+            return ', '.join(clients)
+        else:
+            return 'Empty'
 
+    def add_filter_words(self, word, client_socket):
+        if client_socket in self.filtered_words:
+            self.filtered_words[client_socket].append(word)
+        else:
+            self.filtered_words[client_socket] = [word]
+
+    def filter_words(self, message, client_socket):
+        try:
+            resultwords  = [word for word in message.split(' ') if word.lower() not in self.filtered_words[client_socket]]
+            return ' '.join(resultwords)
+        except:
+            return message
+
+    def get_socket_by_nick(self, nick):
+        for s, n in self.inputs.items():
+            if n == nick:
+                return s
+        return None
 
 # Command line parser.
 if __name__ == '__main__':
