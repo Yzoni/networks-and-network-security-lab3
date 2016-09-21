@@ -5,10 +5,16 @@ STUDENT ID: 10786015
 DESCRIPTION:
 """
 import argparse
-import asyncore
+import select
 import socket
 import sys
-from queue import Queue
+try:
+    # for Python2
+    from Queue import Queue
+except ImportError:
+    # for Python3
+    from queue import Queue
+
 from threading import Thread
 
 from gui import MainWindow
@@ -37,40 +43,22 @@ def ui(receive_queue, send_queue):
 
 
 def work(receive_queue, send_queue, host, port):
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        print('Connecting with ' + str((host, port)))
-        try:
-            s.connect(("127.0.0.1", port))
-            AsyncClient(host, port, receive_queue, send_queue)
-            asyncore.loop(timeout=0.5)
-        except socket.error:
-            print('Connection refused')
-
-
-class AsyncClient(asyncore.dispatcher):
-    def __init__(self, host, port, receive_queue, send_queue):
-        asyncore.dispatcher.__init__(self)
-        self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.connect((host, port))
-        self.receive_queue = receive_queue
-        self.send_queue = send_queue
-
-    def handle_connect(self):
-        pass
-
-    def handle_close(self):
-        self.close()
-
-    def handle_read(self):
-        data = self.recv(1024)
-        self.receive_queue.put(data.decode())
-
-    def writable(self):
-        return not self.send_queue.empty()
-
-    def handle_write(self):
-        self.send(self.send_queue.get().encode())
-
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    print('Connecting with ' + str((host, port)))
+    s.connect((host, port))
+    while True:
+        readable_sockets, writable_sockets, exception_sockets = select.select([s], [], [], 1)
+        print('looping')
+        for r in readable_sockets:
+            r.setblocking(0)
+            data = r.recv(1024)
+            message = data.decode()
+            print('Worker received: ' + message)
+            receive_queue.put(message)
+        if not send_queue.empty():
+            message = send_queue.get().encode()
+            print('Worker sending: ' + message.decode())
+            s.send(message)
 
 # Command line parser.
 if __name__ == '__main__':
@@ -83,12 +71,10 @@ if __name__ == '__main__':
 
     receive_q = Queue()
     send_q = Queue()
-    ui_thread = Thread(target=ui, args=(receive_q, send_q))
-    work_thread = Thread(target=work, args=(receive_q, send_q, args.host, args.port))
 
-    try:
-        ui_thread.start()
-        work_thread.start()
-    except:
-        ui_thread.join()
-        work_thread.join()
+    stop_thread = False
+    ui_thread = Thread(target=ui, args=(receive_q, send_q, lambda: stop_thread))
+    work_thread = Thread(target=work, args=(receive_q, send_q, args.host, args.port, lambda: stop_thread))
+
+    ui_thread.start()
+    work_thread.start()

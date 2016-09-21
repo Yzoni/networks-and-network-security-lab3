@@ -1,3 +1,10 @@
+"""
+Lab 3 - Chat Room (Server)
+NAME: Yorick de Boer
+STUDENT ID: 10786015
+DESCRIPTION:
+"""
+
 import argparse
 import select
 import socket
@@ -88,10 +95,12 @@ class Server:
                 socket.send(message.encode())
 
     def list_commands(self, client_socket, server_socket):
-        self.whisper('/nick <user>', client_socket, server_socket)
-        self.whisper('/say <text>', client_socket, server_socket)
-        self.whisper('/whiser <user> <text>', client_socket, server_socket)
-        self.whisper('/list ', client_socket, server_socket)
+        commands = ['/nick <user>',
+                    '/say <text>',
+                    'whisper <user> <text>',
+                    '/list']
+        for c in commands:
+            self.whisper(c, client_socket, server_socket)
 
     def list_clients(self, client_socket, server_socket):
         clients = ''
