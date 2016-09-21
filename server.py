@@ -40,13 +40,12 @@ class Server:
                             client_socket, client_address = r.accept()
                             if ssl:
                                 client_socket = self.wrap_socket(client_socket)
-                            print('New connection from' + str(client_address))
+                            print('New connection from: ' + str(client_address))
                             self.inputs[client_socket] = 'Unnamed'
                             self.broadcast("Client connected: " + str(client_address), server_socket, client_socket)
                         else:
                             data = r.recv(1024).decode()
                             if data:
-                                print('received ' + str(data) + ' from ' + str(r.getpeername()))
                                 self.parse_data(data, server_socket, r)
                             else:
                                 del self.inputs[r]
@@ -68,7 +67,6 @@ class Server:
         if data[0] == '/':
             command = data.split(' ', 1)[0][1:]
             parameters = data.split(' ')[1:]
-            print(parameters)
             if command == 'nick':
                 self.inputs[client_socket] = parameters[0]
             elif command == 'say':
