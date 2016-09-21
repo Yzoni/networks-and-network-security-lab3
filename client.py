@@ -43,22 +43,22 @@ def ui(receive_queue, send_queue):
 
 
 def work(receive_queue, send_queue, host, port):
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    print('Connecting with ' + str((host, port)))
-    s.connect((host, port))
-    while True:
-        readable_sockets, writable_sockets, exception_sockets = select.select([s], [], [], 1)
-        print('looping')
-        for r in readable_sockets:
-            r.setblocking(0)
-            data = r.recv(1024)
-            message = data.decode()
-            print('Worker received: ' + message)
-            receive_queue.put(message)
-        if not send_queue.empty():
-            message = send_queue.get().encode()
-            print('Worker sending: ' + message.decode())
-            s.send(message)
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        print('Connecting with ' + str((host, port)))
+        s.connect((host, port))
+        while True:
+            readable_sockets, writable_sockets, exception_sockets = select.select([s], [], [], 1)
+            print('looping')
+            for r in readable_sockets:
+                r.setblocking(0)
+                data = r.recv(1024)
+                message = data.decode()
+                print('Worker received: ' + message)
+                receive_queue.put(message)
+            if not send_queue.empty():
+                message = send_queue.get().encode()
+                print('Worker sending: ' + message.decode())
+                s.send(message)
 
 # Command line parser.
 if __name__ == '__main__':
@@ -73,8 +73,8 @@ if __name__ == '__main__':
     send_q = Queue()
 
     stop_thread = False
-    ui_thread = Thread(target=ui, args=(receive_q, send_q, lambda: stop_thread))
-    work_thread = Thread(target=work, args=(receive_q, send_q, args.host, args.port, lambda: stop_thread))
+    ui_thread = Thread(target=ui, args=(receive_q, send_q))
+    work_thread = Thread(target=work, args=(receive_q, send_q, args.host, args.port))
 
     ui_thread.start()
     work_thread.start()
