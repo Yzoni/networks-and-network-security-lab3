@@ -49,7 +49,7 @@ class Client:
                 w.writeln('You: ' + line)
                 send_queue.put(line)
 
-    def work(self, receive_queue, send_queue, host, port):
+    def work(self, receive_queue, send_queue, host, port, stop_thread):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             print('Connecting with ' + str((host, port)))
             if ssl:
@@ -57,16 +57,25 @@ class Client:
             s.connect((host, port))
             while True:
                 readable_sockets, writable_sockets, exception_sockets = select.select([s], [], [], 1)
-                print('looping')
                 for r in readable_sockets:
                     data = r.recv(1024)
-                    message = data.decode()
+                    if data:
+                        message = data.decode()
+                    else:
+                        # Stop working when server disconnects
+                        receive_queue.put('Server disconnected')
+                        s.close()
+                        return
                     print('Worker received: ' + message)
                     receive_queue.put(message)
                 if not send_queue.empty():
                     message = send_queue.get().encode()
                     print('Worker sending: ' + message.decode())
                     s.send(message)
+
+                # Escape loop on stop thread
+                if stop_thread:
+                    return
 
     def wrap_socket(self, socket):
         return ssl.wrap_socket(socket,
@@ -90,7 +99,10 @@ if __name__ == '__main__':
     client = Client('server.cert')
     stop_thread = False
     ui_thread = Thread(target=client.ui, args=(receive_q, send_q))
-    work_thread = Thread(target=client.work, args=(receive_q, send_q, args.host, args.port))
+    work_thread = Thread(target=client.work, args=(receive_q, send_q, args.host, args.port, lambda: stop_thread))
 
     ui_thread.start()
     work_thread.start()
+
+    while work_thread.is_alive():
+        stop_thread = False
