@@ -8,14 +8,19 @@ DESCRIPTION:
 import argparse
 import select
 import socket
+import ssl
 import sys
 
 
 class Server:
-    def __init__(self, port=8080):
+    def __init__(self, port=8080, cert_file='', key_file=''):
         self.port = port
         self.inputs = {}
         self.outputs = []
+        if cert_file and key_file:
+            self.ssl = True
+            self.cert_file = cert_file
+            self.key_file = key_file
 
     def start(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
@@ -29,6 +34,8 @@ class Server:
                     for r in readable_sockets:
                         if r is server_socket:
                             client_socket, client_address = r.accept()
+                            if ssl:
+                                client_socket = self.wrap_socket(client_socket)
                             print('New connection from' + str(client_address))
                             self.inputs[client_socket] = 'Unnamed'
                             self.broadcast("Client connected: " + str(client_address), server_socket, client_socket)
@@ -75,7 +82,8 @@ class Server:
             elif command == 'me':
                 self.whisper('me goes', server_socket, client_socket)
             elif command == 'whois':
-                self.whisper('Name is ' + self.inputs[client_socket] + ', with ip ' + str(client_socket.getpeername()), client_socket,
+                self.whisper('Name is ' + self.inputs[client_socket] + ', with ip ' + str(client_socket.getpeername()),
+                             client_socket,
                              server_socket)
             elif command == 'filter':
                 self.whisper('Command not implemented!', client_socket, server_socket)
@@ -90,9 +98,16 @@ class Server:
 
     def broadcast(self, message, server_socket, client_socket):
         print('Broadcast ' + message)
-        for socket in self.inputs:
-            if socket != server_socket and socket != client_socket:
-                socket.send(message.encode())
+        for s in self.inputs:
+            if s != server_socket and s != client_socket:
+                s.send(message.encode())
+
+    def wrap_socket(self, socket):
+        return ssl.wrap_socket(socket,
+                               server_side=True,
+                               certfile=self.cert_file,
+                               keyfile=self.key_file,
+                               ssl_version=ssl.PROTOCOL_TLSv1)
 
     def list_commands(self, client_socket, server_socket):
         commands = ['/nick <user>',
@@ -115,5 +130,5 @@ if __name__ == '__main__':
     p = argparse.ArgumentParser()
     p.add_argument('--port', help='port to listen on', default=8080, type=int)
     args = p.parse_args(sys.argv[1:])
-    server = Server(args.port)
+    server = Server(args.port, cert_file='server.cert', key_file='server.key')
     server.start()
