@@ -10,7 +10,7 @@ import select
 import socket
 import ssl
 import sys
-
+import time
 
 class Server:
     def __init__(self, port=8080, cert_file='', key_file=''):
@@ -112,7 +112,8 @@ class Server:
         :param send_socket: the client who sends the message
         :return: None
         """
-        message = '(WHISPERS) ' + self.inputs[send_socket] + ': ' + message
+        timestamp = time.strftime("%d/%m/%Y %H:%M:%S")
+        message = timestamp + ' | ' + '(WHISPERS) ' + self.inputs[send_socket] + ': ' + message
         print(message)
         whisper_socket.send(message.encode())
 
@@ -125,7 +126,8 @@ class Server:
         :param client_socket: the sending client socket
         :return: None
         """
-        message = str(self.inputs[client_socket]) + ': ' + message
+        timestamp = time.strftime("%d/%m/%Y %H:%M:%S")
+        message = timestamp + ' | ' + str(self.inputs[client_socket]) + ': ' + message
         print(message)
         for s in self.inputs:
             if s != server_socket and s != client_socket:

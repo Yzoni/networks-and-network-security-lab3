@@ -9,6 +9,7 @@ import select
 import socket
 import ssl
 import sys
+import time
 
 try:
     # for Python2
@@ -67,7 +68,8 @@ class UI(Thread):
                 while not self.receive_queue.empty():
                     w.writeln(self.receive_queue.get())
             if line:
-                w.writeln('You: ' + line)
+                timestamp = time.strftime("%d/%m/%Y %H:%M:%S")
+                w.writeln(timestamp + ' | You: ' + line)
                 self.send_queue.put(line)
 
     def stop(self):
