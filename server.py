@@ -4,7 +4,7 @@ NAME: Yorick de Boer
 STUDENT ID: 10786015
 DESCRIPTION:
 
-Everything implemented
+Everything implemented including encryption
 
 Banned client ips go into ban.txt
 
@@ -79,7 +79,7 @@ class Server:
             command = data.split(' ', 1)[0][1:]
             parameters = data.split(' ')[1:]
             if command == 'nick':
-                self.command_nick(client_socket, parameters[0])
+                self.command_nick(parameters[0], server_socket, client_socket)
             elif command == 'say':
                 self.command_say(parameters, server_socket, client_socket)
             elif command == 'whisper':
@@ -103,8 +103,11 @@ class Server:
         else:
             self.broadcast(data, server_socket, client_socket)
 
-    def command_nick(self, client_socket, nick):
-        self.inputs[client_socket] = nick
+    def command_nick(self, nick, server_socket, client_socket):
+        if self.get_socket_by_nick(nick) is None:
+            self.inputs[client_socket] = nick
+        else:
+            self.whisper('Nick already in use!', client_socket, server_socket)
 
     def command_say(self, message, server_socket, client_socket):
         self.broadcast(' '.join(message), server_socket, client_socket)
@@ -113,7 +116,7 @@ class Server:
         message = ' '.join(message)
         sock = self.get_socket_by_nick(whisper_client_nick)
         if sock:
-            self.whisper(message, whisper_client_nick, client_socket)
+            self.whisper(message, sock, client_socket)
         else:
             self.whisper('User does not exist', client_socket, server_socket)
 
@@ -132,7 +135,7 @@ class Server:
                     '/help or /?            - List commands',
                     '/me                    - Doing something',
                     '/whois <user>          - Info of user',
-                    '/filter <word>         - Filter words'
+                    '/filter <word>         - Filter words',
                     '/kick <user>           - Kick user',
                     '/ban <user>            - Ban user'
                     ]
@@ -318,8 +321,8 @@ class Server:
             return []
 
     def write_line_to_file(self, file_path, line):
-        with open(file_path, 'w') as f:
-            f.write(line)
+        with open(file_path, 'a') as f:
+            f.write(line + '\n')
 
 
 class ClientType(Enum):

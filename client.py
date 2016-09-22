@@ -4,34 +4,39 @@ NAME: Yorick de Boer
 STUDENT ID: 10786015
 DESCRIPTION:
 
-Everything implemented
+Everything implemented including encryption
 
 Separate threads for UI and worker logic
 
 """
+
 import argparse
 import select
 import socket
 import ssl
 import sys
 import time
+from threading import Thread
+
+from gui import MainWindow
 
 try:
     # for Python2
     from Queue import Queue
     import Tkinter as tk
-
 except ImportError:
     # for Python3
     from queue import Queue
     import tkinter as tk
 
 
-from threading import Thread
-
-from gui import MainWindow
-
 class Client:
+    """
+    Main class uses UI and Worker classes and manages their thread closing.
+
+    Communication between threads is handled by queues
+    """
+
     def __init__(self, host, port, cert_file=''):
         if cert_file:
             self.ssl = True
@@ -42,6 +47,10 @@ class Client:
         self.send_queue = Queue()
 
     def run(self):
+        """
+        Runner function
+        :return:
+        """
         ui_thread = UI(self.receive_queue, self.send_queue)
         work_thread = Worker(self.receive_queue, self.send_queue, self.host, self.port, self.cert_file)
         ui_thread.start()
@@ -72,9 +81,11 @@ class UI(Thread):
                 # if the user entered a line getline() returns a string.
                 line = w.getline()
 
-                if not self.receive_queue.empty():
-                    while not self.receive_queue.empty():
-                        w.writeln(self.receive_queue.get())
+                # Received lines
+                while not self.receive_queue.empty():
+                    w.writeln(self.receive_queue.get())
+
+                # Sending lines
                 if line:
                     timestamp = time.strftime("%d/%m/%Y %H:%M:%S")
                     w.writeln(timestamp + ' | You: ' + line)
@@ -103,13 +114,16 @@ class Worker(Thread):
     def run(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             print('Connecting with ' + str((self.host, self.port)))
+
             if ssl:
                 s = self.wrap_socket(s)
+
             try:
                 s.connect((self.host, self.port))
             except ConnectionRefusedError:
                 self.receive_queue.put('Connection refused, server is online?')
                 return
+
             while self.go:
                 readable_sockets, writable_sockets, exception_sockets = select.select([s], [], [], 1)
                 for r in readable_sockets:
