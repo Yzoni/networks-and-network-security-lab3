@@ -3,6 +3,11 @@ Lab 3 - Chat Room (Client)
 NAME: Yorick de Boer
 STUDENT ID: 10786015
 DESCRIPTION:
+
+Everything implemented
+
+Separate threads for UI and worker logic
+
 """
 import argparse
 import select
@@ -14,14 +19,17 @@ import time
 try:
     # for Python2
     from Queue import Queue
+    import Tkinter as tk
+
 except ImportError:
     # for Python3
     from queue import Queue
+    import tkinter as tk
+
 
 from threading import Thread
 
 from gui import MainWindow
-
 
 class Client:
     def __init__(self, host, port, cert_file=''):
@@ -59,18 +67,21 @@ class UI(Thread):
     def run(self):
         w = MainWindow()
         # update() returns false when the user quits or presses escape.
+        try:
+            while w.update():
+                # if the user entered a line getline() returns a string.
+                line = w.getline()
 
-        while w.update():
-            # if the user entered a line getline() returns a string.
-            line = w.getline()
-
-            if not self.receive_queue.empty():
-                while not self.receive_queue.empty():
-                    w.writeln(self.receive_queue.get())
-            if line:
-                timestamp = time.strftime("%d/%m/%Y %H:%M:%S")
-                w.writeln(timestamp + ' | You: ' + line)
-                self.send_queue.put(line)
+                if not self.receive_queue.empty():
+                    while not self.receive_queue.empty():
+                        w.writeln(self.receive_queue.get())
+                if line:
+                    timestamp = time.strftime("%d/%m/%Y %H:%M:%S")
+                    w.writeln(timestamp + ' | You: ' + line)
+                    self.send_queue.put(line)
+        except tk.TclError:
+            print('GUI closed')
+            return
 
     def stop(self):
         self.go = False
@@ -82,7 +93,7 @@ class Worker(Thread):
         if cert_file:
             self.ssl = True
             self.cert_file = cert_file
-        self.receive_queu = receive_queue
+        self.receive_queue = receive_queue
         self.send_queue = send_queue
         self.host = host
         self.port = port
@@ -94,7 +105,11 @@ class Worker(Thread):
             print('Connecting with ' + str((self.host, self.port)))
             if ssl:
                 s = self.wrap_socket(s)
-            s.connect((self.host, self.port))
+            try:
+                s.connect((self.host, self.port))
+            except ConnectionRefusedError:
+                self.receive_queue.put('Connection refused, server is online?')
+                return
             while self.go:
                 readable_sockets, writable_sockets, exception_sockets = select.select([s], [], [], 1)
                 for r in readable_sockets:
@@ -103,11 +118,11 @@ class Worker(Thread):
                         message = data.decode()
                     else:
                         # Stop working when server disconnects
-                        self.receive_queu.put('Server disconnected')
+                        self.receive_queue.put('Server disconnected')
                         s.close()
                         return
                     print('Worker received: ' + message)
-                    self.receive_queu.put(message)
+                    self.receive_queue.put(message)
                 if not self.send_queue.empty():
                     message = self.send_queue.get().encode()
                     print('Worker sending: ' + message.decode())
