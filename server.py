@@ -104,15 +104,40 @@ class Server:
             self.broadcast(data, server_socket, client_socket)
 
     def command_nick(self, nick, server_socket, client_socket):
+        """
+        Change the nick of a user
+
+        :param nick: the new nick
+        :param server_socket: server_socket
+        :param client_socket: socket to change nick
+        :return:
+        """
         if self.get_socket_by_nick(nick) is None:
             self.inputs[client_socket] = nick
         else:
             self.whisper('Nick already in use!', client_socket, server_socket)
 
     def command_say(self, message, server_socket, client_socket):
+        """
+        Tell all other users
+
+        :param message: message
+        :param server_socket: server_socket
+        :param client_socket: sending client_socket
+        :return:
+        """
         self.broadcast(' '.join(message), server_socket, client_socket)
 
     def command_whisper(self, whisper_client_nick, message, server_socket, client_socket):
+        """
+        Whisper a message to another client by nick
+
+        :param whisper_client_nick: other client nick
+        :param message: message
+        :param server_socket: server_socket
+        :param client_socket: sending client_socket
+        :return:
+        """
         message = ' '.join(message)
         sock = self.get_socket_by_nick(whisper_client_nick)
         if sock:
@@ -160,9 +185,24 @@ class Server:
             self.whisper('Empty', client_socket, server_socket)
 
     def command_me(self, server_socket, client_socket):
+        """
+        Tell me something
+
+        :param server_socket:
+        :param client_socket:
+        :return:
+        """
         self.whisper(self.inputs[client_socket] + 'goes to the store.', server_socket, client_socket)
 
     def command_whois(self, nick, server_socket, client_socket):
+        """
+        Get ip info of a other client
+
+        :param nick: the nick of the client to get the info from
+        :param server_socket: server_socket
+        :param client_socket: The requesting client
+        :return:
+        """
         sock = self.get_socket_by_nick(nick)
         if sock:
             self.whisper('Name is ' + self.inputs[sock] + ', with ip ' + str(client_socket.getpeername()),
@@ -172,22 +212,48 @@ class Server:
             self.whisper('User does not exist', client_socket, server_socket)
 
     def command_filter(self, word, server_socket, client_socket):
+        """
+        Add a word to the message filter
+
+        :param word: word to be filtered
+        :param server_socket:
+        :param client_socket:
+        :return:
+        """
         self.add_filter_word(word, client_socket)
         self.whisper('Will filter word: "' + word + '"', client_socket, server_socket)
 
     def command_kick(self, nick, server_socket, client_socket):
+        """
+        Kick a client
+
+        :param nick: nick of the to be kicked client
+        :param server_socket:
+        :param client_socket: client requesting the kick
+        :return:
+        """
         if self.authenticate_client(client_socket) == ClientType.admin:
             sock = self.get_socket_by_nick(nick)
             self.whisper('You have been kicked', sock, server_socket)
             self.kick_client(sock)
+            self.broadcast(nick + ' has been kicked!', server_socket, server_socket)
         else:
             self.whisper('Not authorized to run this command', client_socket, server_socket)
 
     def command_ban(self, nick, server_socket, client_socket):
+        """
+        Kick a client and add to ban list
+
+        :param nick: nick of the to be banned client
+        :param server_socket: server_socket
+        :param client_socket: client requesting the ban
+        :return:
+        """
         if self.authenticate_client(client_socket) == ClientType.admin:
             sock = self.get_socket_by_nick(nick)
             self.whisper('You have been banned!', sock, server_socket)
             self.ban_client(sock)
+            self.broadcast(nick + ' has been banned!', server_socket, server_socket)
         else:
             self.whisper('Not authorized to run this command', client_socket, server_socket)
 
@@ -276,6 +342,11 @@ class Server:
         return None
 
     def authenticate_client(self, client_socket):
+        """
+        Return client type from saved client types
+        :param client_socket: the client to be checked
+        :return:
+        """
         client_ip = client_socket.getpeername()[0]
         if client_ip in self.ban_ip:
             return ClientType.banned
